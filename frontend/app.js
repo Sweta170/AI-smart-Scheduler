@@ -403,6 +403,28 @@ document.addEventListener("DOMContentLoaded", () => {
     themeSelect.value = savedTheme;
   }
 
+  // Password visibility toggle
+  const togglePasswordBtn = document.getElementById('togglePasswordBtn');
+  const authPasswordInput = document.getElementById('authPassword');
+  if (togglePasswordBtn && authPasswordInput) {
+    togglePasswordBtn.addEventListener('click', () => {
+      const isPassword = authPasswordInput.getAttribute('type') === 'password';
+      authPasswordInput.setAttribute('type', isPassword ? 'text' : 'password');
+      
+      const eyeShow = togglePasswordBtn.querySelector('.eye-icon-show');
+      const eyeHide = togglePasswordBtn.querySelector('.eye-icon-hide');
+      if (eyeShow && eyeHide) {
+        if (isPassword) {
+          eyeShow.classList.add('hidden');
+          eyeHide.classList.remove('hidden');
+        } else {
+          eyeShow.classList.remove('hidden');
+          eyeHide.classList.add('hidden');
+        }
+      }
+    });
+  }
+
   checkAuthAndInit();
 });
 

@@ -6,6 +6,8 @@ export default function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [error, setError] = useState('');
   const { login } = useAuth();
@@ -79,25 +81,43 @@ export default function Register() {
           <div style={styles.formRow}>
             <div style={{ ...styles.formGroup, flex: 1 }}>
               <label style={styles.label}>Password</label>
-              <input
-                type="password"
-                placeholder="••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={styles.input}
-                required
-              />
+              <div style={styles.passwordWrapper}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={styles.passwordInput}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={styles.toggleBtn}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
             </div>
             <div style={{ ...styles.formGroup, flex: 1 }}>
               <label style={styles.label}>Confirm Password</label>
-              <input
-                type="password"
-                placeholder="••••••"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                style={styles.input}
-                required
-              />
+              <div style={styles.passwordWrapper}>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  style={styles.passwordInput}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={styles.toggleBtn}
+                >
+                  {showConfirmPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -256,5 +276,31 @@ const styles = {
     color: '#6366f1',
     textDecoration: 'none',
     fontWeight: '600',
+  },
+  passwordWrapper: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  passwordInput: {
+    width: '100%',
+    background: 'rgba(15, 23, 42, 0.35)',
+    border: '1px solid rgba(148, 163, 184, 0.12)',
+    borderRadius: '10px',
+    padding: '12px 16px',
+    paddingRight: '60px',
+    fontSize: '14px',
+    color: '#f1f5f9',
+    outline: 'none',
+  },
+  toggleBtn: {
+    position: 'absolute',
+    right: '12px',
+    background: 'none',
+    border: 'none',
+    color: '#6366f1',
+    fontSize: '12px',
+    fontWeight: '600',
+    cursor: 'pointer',
   },
 };
