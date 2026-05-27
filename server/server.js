@@ -135,6 +135,9 @@ async function seedDatabase() {
 const apiRouter = require('./routes/api');
 app.use('/api', apiRouter);
 
+// Start automated reminder background cron job
+require('./jobs/reminderJob');
+
 // Start Server
 app.listen(PORT, () => {
   console.log(`MeetAI Express server running on port ${PORT}`);

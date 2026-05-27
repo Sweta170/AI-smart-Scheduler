@@ -385,6 +385,30 @@ router.put('/meetings/update/:id', async (req, res) => {
     if (changes.title) meeting.title = changes.title;
 
     await meeting.save();
+
+    // Send update email notification
+    try {
+      const populatedMeeting = await Meeting.findById(meeting._id).populate('attendees');
+      const attendeeNames = populatedMeeting.attendees.map(a => a.name);
+      const recipientEmails = populatedMeeting.attendees.map(a => a.email).filter(e => !!e);
+      
+      const buildHtmlEmail = require('../jobs/reminderJob');
+      const htmlContent = buildHtmlEmail(`Updated: ${populatedMeeting.title}`, populatedMeeting, attendeeNames);
+
+      if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
+        const transporter = require('../config/mailer');
+        await transporter.sendMail({
+          from: `"${process.env.APP_NAME || 'MeetAI'}" <${process.env.EMAIL_USER}>`,
+          to: recipientEmails.join(', '),
+          subject: `Updated: ${populatedMeeting.title} — new time ${populatedMeeting.time}`,
+          html: htmlContent
+        });
+        console.log(`[UPDATE EMAIL] Sent successfully to ${recipientEmails.join(', ')}`);
+      }
+    } catch (mailErr) {
+      console.error("[MAILER UPDATE] Error sending updated notice:", mailErr);
+    }
+
     res.json({ status: "updated", meeting });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -401,6 +425,32 @@ router.delete('/meetings/cancel/:id', async (req, res) => {
 
     meeting.status = "cancelled";
     await meeting.save();
+
+    // Send cancellation email notification
+    try {
+      const populatedMeeting = await Meeting.findById(meeting._id).populate('attendees');
+      const attendeeNames = populatedMeeting.attendees.map(a => a.name);
+      const recipientEmails = populatedMeeting.attendees.map(a => a.email).filter(e => !!e);
+
+      const buildHtmlEmail = require('../jobs/reminderJob');
+      const htmlContent = buildHtmlEmail(`Cancelled: ${populatedMeeting.title}`, {
+        ...populatedMeeting.toObject(),
+        notes: "This meeting has been cancelled."
+      }, attendeeNames);
+
+      if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
+        const transporter = require('../config/mailer');
+        await transporter.sendMail({
+          from: `"${process.env.APP_NAME || 'MeetAI'}" <${process.env.EMAIL_USER}>`,
+          to: recipientEmails.join(', '),
+          subject: `Cancelled: ${populatedMeeting.title}`,
+          html: htmlContent
+        });
+        console.log(`[CANCEL EMAIL] Sent successfully to ${recipientEmails.join(', ')}`);
+      }
+    } catch (mailErr) {
+      console.error("[MAILER CANCEL] Error sending cancellation notice:", mailErr);
+    }
 
     res.json({ status: "cancelled" });
   } catch (error) {
@@ -490,8 +540,123 @@ router.post('/conflicts/resolve', async (req, res) => {
 router.post('/invites/send', async (req, res) => {
   try {
     const { meetingId, attendees, message } = req.body;
-    res.json({ sent: true, recipients: attendees || [] });
+    const meeting = await Meeting.findById(meetingId).populate('attendees');
+    if (!meeting) {
+      return res.status(404).json({ error: "Meeting not found" });
+    }
+
+    const attendeeNames = meeting.attendees.map(a => a.name);
+    const recipientEmails = meeting.attendees.map(a => a.email).filter(e => !!e);
+    
+    const buildHtmlEmail = require('../jobs/reminderJob');
+    const htmlContent = buildHtmlEmail(`You're invited: ${meeting.title}`, meeting, attendeeNames);
+
+    if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
+      const transporter = require('../config/mailer');
+      await transporter.sendMail({
+        from: `"${process.env.APP_NAME || 'MeetAI'}" <${process.env.EMAIL_USER}>`,
+        to: recipientEmails.join(', '),
+        subject: `You're invited: ${meeting.title} on ${new Date(meeting.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+        html: htmlContent
+      });
+      console.log(`[INVITE EMAIL] Sent successfully to ${recipientEmails.join(', ')}`);
+    }
+
+    // Update attendees.notified = true in MongoDB
+    await Attendee.updateMany(
+      { meetingId: meeting._id, userId: { $in: meeting.attendees.map(a => a._id) } },
+      { $set: { notified: true, notifiedAt: new Date() } }
+    );
+
+    res.json({ sent: true, recipients: recipientEmails });
   } catch (error) {
+    console.error("[MAILER INVITE] Error sending invite:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------------------------------------------------------
+// 11b. POST /api/invites/cancel
+// ---------------------------------------------------------
+router.post('/invites/cancel', async (req, res) => {
+  try {
+    const { meetingId, reason } = req.body;
+    const meeting = await Meeting.findById(meetingId).populate('attendees');
+    if (!meeting) return res.status(404).json({ error: "Meeting not found" });
+
+    const attendeeNames = meeting.attendees.map(a => a.name);
+    const recipientEmails = meeting.attendees.map(a => a.email).filter(e => !!e);
+
+    const buildHtmlEmail = require('../jobs/reminderJob');
+    const htmlContent = buildHtmlEmail(`Cancelled: ${meeting.title}`, {
+      ...meeting.toObject(),
+      notes: reason || "Meeting cancelled by host."
+    }, attendeeNames);
+
+    if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
+      const transporter = require('../config/mailer');
+      await transporter.sendMail({
+        from: `"${process.env.APP_NAME || 'MeetAI'}" <${process.env.EMAIL_USER}>`,
+        to: recipientEmails.join(', '),
+        subject: `Cancelled: ${meeting.title}`,
+        html: htmlContent
+      });
+      console.log(`[CANCEL EMAIL] Sent successfully to ${recipientEmails.join(', ')}`);
+    }
+
+    meeting.status = "cancelled";
+    await meeting.save();
+
+    res.json({ sent: true, status: "cancelled" });
+  } catch (error) {
+    console.error("[MAILER CANCEL] Error sending cancellation:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------------------------------------------------------
+// 11c. POST /api/reminders/send
+// ---------------------------------------------------------
+router.post('/reminders/send', async (req, res) => {
+  try {
+    const { reminderId } = req.body;
+    const reminder = await Reminder.findById(reminderId)
+      .populate({ path: 'meetingId', populate: { path: 'attendees' } })
+      .populate('userId');
+
+    if (!reminder) {
+      return res.status(404).json({ error: "Reminder not found" });
+    }
+
+    const meeting = reminder.meetingId;
+    if (!meeting) {
+      return res.status(400).json({ error: "Associated meeting not found for this reminder" });
+    }
+
+    const attendeeNames = meeting.attendees.map(a => a.name);
+    const recipientEmail = reminder.userId.email;
+    
+    const buildHtmlEmail = require('../jobs/reminderJob');
+    const htmlContent = buildHtmlEmail(`Reminder: ${meeting.title}`, meeting, attendeeNames);
+
+    if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
+      const transporter = require('../config/mailer');
+      await transporter.sendMail({
+        from: `"${process.env.APP_NAME || 'MeetAI'}" <${process.env.EMAIL_USER}>`,
+        to: recipientEmail,
+        subject: `Reminder: ${meeting.title} at ${meeting.time}`,
+        html: htmlContent
+      });
+      console.log(`[REMINDER EMAIL] Sent successfully to ${recipientEmail}`);
+    }
+
+    reminder.sent = true;
+    reminder.sentAt = new Date();
+    await reminder.save();
+
+    res.json({ sent: true });
+  } catch (error) {
+    console.error("[MAILER REMINDER] Error sending reminder:", error);
     res.status(500).json({ error: error.message });
   }
 });
