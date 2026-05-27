@@ -646,7 +646,7 @@ ALWAYS check user preferences before applying defaults
 - Never say "As an AI I cannot..."
 - Never say "Let me know if you need anything!"
 - Never end without a clear next action
-\`;
+`;
 
 
 // Helper functions for time conversion
