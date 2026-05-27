@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const { google } = require('googleapis');
+const { oauth2Client } = require('../config/googleOAuth');
 
 const User = require('../models/User');
 const Meeting = require('../models/Meeting');
@@ -778,8 +780,8 @@ router.post('/agent', async (req, res) => {
     const lastAssistantMsg = history.length > 0 ? history[history.length - 1].content : "";
     const lastAssistantMsgLower = lastAssistantMsg ? lastAssistantMsg.toLowerCase() : "";
 
-    // Find host user
-    const hostUser = await User.findOne({ email: "you@company.com" });
+    // Find host user dynamically or fallback
+    const hostUser = req.user || await User.findOne({ email: "you@company.com" });
     if (!hostUser) {
       return res.status(404).json({ error: "Host user not found" });
     }
@@ -852,6 +854,56 @@ router.post('/agent', async (req, res) => {
       });
 
       await meeting.save();
+
+      // If host user has connected Google Calendar, create a real Google Calendar Event
+      if (hostUser.googleCalendar && hostUser.googleCalendar.connected) {
+        try {
+          const refreshIfExpired = require('../utils/refreshGoogleToken');
+          const accessToken = await refreshIfExpired(hostUser._id);
+          
+          oauth2Client.setCredentials({ access_token: accessToken });
+          const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+          
+          const dateOnly = new Date(dateStr).toISOString().split('T')[0];
+          const startStr = `${dateOnly}T${time24}:00`;
+          const endStr = new Date(new Date(startStr).getTime() + duration * 60 * 1000).toISOString();
+          
+          const gcalEvent = {
+            summary: title,
+            description: `Scheduled by MeetAI Agent.\nAttendees: ${attendeesList.join(', ')}`,
+            start: {
+              dateTime: new Date(startStr).toISOString(),
+              timeZone: hostUser.timezone || 'Asia/Kolkata'
+            },
+            end: {
+              dateTime: endStr,
+              timeZone: hostUser.timezone || 'Asia/Kolkata'
+            },
+            attendees: attendeesList.map(email => ({ email })),
+            conferenceData: {
+              createRequest: {
+                requestId: meeting._id.toString(),
+                conferenceSolutionKey: { type: 'hangoutsMeet' }
+              }
+            }
+          };
+          
+          const response = await calendar.events.insert({
+            calendarId: 'primary',
+            resource: gcalEvent,
+            conferenceDataVersion: 1
+          });
+          
+          meeting.googleEventId = response.data.id;
+          if (response.data.hangoutLink) {
+            meeting.videoLink = response.data.hangoutLink;
+          }
+          await meeting.save();
+          console.log('[AGENT GCAL CREATE] Real Google Calendar event created:', response.data.id);
+        } catch (gcalErr) {
+          console.error('[AGENT GCAL CREATE ERROR] Failed to create Google Calendar event:', gcalErr.message);
+        }
+      }
 
       // Create attendee RSVP records
       const attendeeRecords = resolvedIds.map(uId => ({

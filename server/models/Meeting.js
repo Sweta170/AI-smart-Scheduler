@@ -19,7 +19,8 @@ const meetingSchema = new mongoose.Schema({
   },
   videoLink: { type: String },
   agenda: [{ type: String }],
-  notes: { type: String, default: "" }
+  notes: { type: String, default: "" },
+  googleEventId: { type: String, unique: true, sparse: true }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Meeting', meetingSchema);

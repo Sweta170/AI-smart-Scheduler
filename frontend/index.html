@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="MeetAI — AI-powered smart meeting scheduler with conflict detection, timezone management, and intelligent scheduling.">
   <title>MeetAI — Smart Scheduling Workspace</title>
-  <link rel="stylesheet" href="style.css?v=2.0.2">
+  <link rel="stylesheet" href="style.css?v=2.0.5">
 </head>
 <body>
   <div class="app-container">
@@ -27,6 +27,14 @@
       </div>
 
       <div class="header-right" style="display: flex; align-items: center; gap: 14px;">
+        <div id="userProfileBadge" class="user-profile-badge" style="display: none;">
+          <div id="userAvatar" class="user-avatar">U</div>
+          <span id="userNameDisplay" class="user-name-display">User</span>
+          <button id="logoutBtn" class="logout-btn" onclick="handleLogout()" title="Logout">
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          </button>
+        </div>
+
         <div class="theme-selector">
           <select id="themeSelect" onchange="changeTheme(this.value)" class="theme-select-input">
             <option value="dark">Dark</option>
@@ -402,7 +410,9 @@
                     </div>
                   </div>
                   <p class="integration-desc">Connect Gmail or Google Workspace account to sync work meetings and auto-detect scheduling conflicts.</p>
-                  <button class="btn btn-primary integration-connect-btn" id="btn-connect-google" onclick="connectService('google')">Connect</button>
+                  <div class="gcal-actions-wrapper" id="gcal-actions-wrapper">
+                    <button class="btn btn-primary integration-connect-btn" id="btn-connect-google">Connect</button>
+                  </div>
                 </div>
                 
                 <!-- Outlook -->
@@ -792,9 +802,63 @@
     </div>
   </div>
 
+  <!-- Authentication Overlay Screen -->
+  <div class="auth-overlay-screen" id="authOverlayScreen" data-auth-mode="login">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo">MeetAI</div>
+        <div class="auth-title" id="authTitleText">Welcome Back</div>
+        <div class="auth-subtitle" id="authSubtitleText">Login to access your AI scheduling workspace</div>
+      </div>
+
+      <div class="auth-tabs">
+        <div class="auth-tab active" id="authTabLogin" onclick="setAuthMode('login')">Login</div>
+        <div class="auth-tab" id="authTabRegister" onclick="setAuthMode('register')">Register</div>
+      </div>
+
+      <div class="auth-alert" id="authAlert"></div>
+
+      <form class="auth-form" id="authForm" onsubmit="handleAuthSubmit(event)">
+        <!-- Register-only fields -->
+        <div class="auth-field auth-form-register-only">
+          <label class="auth-label">Full Name</label>
+          <input type="text" id="authName" class="auth-input" placeholder="e.g. John Doe" autocomplete="name">
+        </div>
+
+        <!-- Shared fields -->
+        <div class="auth-field">
+          <label class="auth-label">Email Address</label>
+          <input type="email" id="authEmail" class="auth-input" placeholder="e.g. john@company.com" required autocomplete="email">
+        </div>
+
+        <div class="auth-field">
+          <label class="auth-label">Password</label>
+          <input type="password" id="authPassword" class="auth-input" placeholder="••••••••" required minlength="6" autocomplete="current-password">
+        </div>
+
+        <!-- Register-only fields -->
+        <div class="auth-field auth-form-register-only">
+          <label class="auth-label">Timezone</label>
+          <select id="authTimezone" class="auth-select">
+            <option value="Asia/Kolkata">Asia/Kolkata (IST, +05:30)</option>
+            <option value="Asia/Dubai">Asia/Dubai (GST, +04:00)</option>
+            <option value="Europe/London">Europe/London (BST/GMT, +01:00)</option>
+            <option value="America/New_York">America/New_York (EST/EDT, -05:00)</option>
+            <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT, -08:00)</option>
+          </select>
+        </div>
+
+        <button type="submit" class="auth-btn" id="authSubmitBtn">
+          <span>Login to Workspace</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </button>
+      </form>
+    </div>
+  </div>
+
   <!-- Scripts -->
-  <script src="scheduler-engine.js?v=2.0.0"></script>
-  <script src="app.js?v=2.0.0"></script>
-  <script src="onboarding.js?v=2.0.0"></script>
+  <script src="scheduler-engine.js?v=2.0.5"></script>
+  <script src="app.js?v=2.0.5"></script>
+  <script src="onboarding.js?v=2.0.5"></script>
 </body>
 </html>

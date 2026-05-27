@@ -132,8 +132,15 @@ async function seedDatabase() {
 }
 
 // REST API routes registration will go here
+const authRouter = require('./routes/auth');
+app.use('/api/auth', authRouter);
+
+const calendarRouter = require('./routes/calendar');
+app.use('/api/calendar', calendarRouter);
+
+const { protect } = require('./middleware/auth');
 const apiRouter = require('./routes/api');
-app.use('/api', apiRouter);
+app.use('/api', protect, apiRouter);
 
 // Start automated reminder background cron job
 require('./jobs/reminderJob');

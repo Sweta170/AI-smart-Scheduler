@@ -6,11 +6,393 @@ const API_BASE = 'http://localhost:5000/api';
 let conversationHistory = [];
 let chatDrawerOpen = false;
 
+// Intercept all fetch requests to append JWT token
+const originalFetch = window.fetch;
+window.fetch = async function (url, options) {
+  const token = localStorage.getItem('meetai_token');
+  options = options || {};
+  
+  if (!options.headers) {
+    options.headers = {};
+  }
+  
+  if (token) {
+    if (options.headers instanceof Headers) {
+      options.headers.set('Authorization', `Bearer ${token}`);
+    } else {
+      options.headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+  
+  try {
+    const response = await originalFetch(url, options);
+    if (response.status === 401) {
+      const urlStr = typeof url === 'string' ? url : (url && url.url ? url.url : '');
+      if (urlStr && urlStr.includes('/api/') && !urlStr.includes('/api/auth/')) {
+        handleLogout();
+      }
+    }
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
 // Theme management
 function changeTheme(themeName) {
   document.documentElement.setAttribute('data-theme', themeName);
   localStorage.setItem('meetai_theme', themeName);
 }
+
+// Auth functions
+function showAuthOverlay() {
+  const overlay = document.getElementById('authOverlayScreen');
+  if (overlay) {
+    overlay.classList.remove('hidden');
+  }
+}
+
+function hideAuthOverlay() {
+  const overlay = document.getElementById('authOverlayScreen');
+  if (overlay) {
+    overlay.classList.add('hidden');
+  }
+}
+
+function setAuthMode(mode) {
+  const overlay = document.getElementById('authOverlayScreen');
+  if (!overlay) return;
+  overlay.setAttribute('data-auth-mode', mode);
+  
+  const loginTab = document.getElementById('authTabLogin');
+  const registerTab = document.getElementById('authTabRegister');
+  const titleText = document.getElementById('authTitleText');
+  const subtitleText = document.getElementById('authSubtitleText');
+  const submitBtn = document.getElementById('authSubmitBtn');
+  const submitBtnSpan = submitBtn ? submitBtn.querySelector('span') : null;
+  const authNameInput = document.getElementById('authName');
+  
+  const alertEl = document.getElementById('authAlert');
+  if (alertEl) {
+    alertEl.className = 'auth-alert';
+    alertEl.style.display = 'none';
+  }
+  
+  if (mode === 'login') {
+    if (loginTab) loginTab.classList.add('active');
+    if (registerTab) registerTab.classList.remove('active');
+    if (titleText) titleText.textContent = 'Welcome Back';
+    if (subtitleText) subtitleText.textContent = 'Login to access your AI scheduling workspace';
+    if (submitBtnSpan) submitBtnSpan.textContent = 'Login to Workspace';
+    if (authNameInput) authNameInput.removeAttribute('required');
+  } else {
+    if (loginTab) loginTab.classList.remove('active');
+    if (registerTab) registerTab.classList.add('active');
+    if (titleText) titleText.textContent = 'Create Account';
+    if (subtitleText) subtitleText.textContent = 'Register to start scheduling with MeetAI';
+    if (submitBtnSpan) submitBtnSpan.textContent = 'Register & Setup';
+    if (authNameInput) authNameInput.setAttribute('required', 'true');
+  }
+}
+
+async function handleAuthSubmit(event) {
+  event.preventDefault();
+  
+  const overlay = document.getElementById('authOverlayScreen');
+  const mode = overlay ? overlay.getAttribute('data-auth-mode') : 'login';
+  const alertEl = document.getElementById('authAlert');
+  const submitBtn = document.getElementById('authSubmitBtn');
+  
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  
+  if (alertEl) {
+    alertEl.style.display = 'none';
+    alertEl.className = 'auth-alert';
+  }
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = '0.7';
+  }
+  
+  try {
+    let response;
+    if (mode === 'login') {
+      response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+    } else {
+      const name = document.getElementById('authName').value.trim();
+      const timezone = document.getElementById('authTimezone').value;
+      response = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, timezone })
+      });
+    }
+    
+    const data = await response.json();
+    if (response.ok && data.success) {
+      if (alertEl) {
+        alertEl.className = 'auth-alert success';
+        alertEl.textContent = mode === 'login' ? 'Login successful! Entering workspace...' : 'Registration successful! Entering workspace...';
+        alertEl.style.display = 'block';
+      }
+      
+      localStorage.setItem('meetai_token', data.token);
+      
+      updateUserUI(data.user);
+      
+      setTimeout(() => {
+        hideAuthOverlay();
+        document.getElementById('authPassword').value = '';
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.style.opacity = '';
+        }
+        initApp();
+      }, 1000);
+    } else {
+      let errMsg = data.error || 'Authentication failed';
+      if (data.errors && Array.isArray(data.errors)) {
+        errMsg = data.errors.map(e => e.msg).join(', ');
+      }
+      if (alertEl) {
+        alertEl.className = 'auth-alert danger';
+        alertEl.textContent = errMsg;
+        alertEl.style.display = 'block';
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.style.opacity = '';
+      }
+    }
+  } catch (err) {
+    console.error("Auth submit error:", err);
+    if (alertEl) {
+      alertEl.className = 'auth-alert danger';
+      alertEl.textContent = 'Server connection error. Please try again.';
+      alertEl.style.display = 'block';
+    }
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = '';
+    }
+  }
+}
+
+function updateUserUI(user) {
+  if (typeof STATE !== 'undefined') {
+    STATE.preferences.userId = user.id;
+    STATE.preferences.userName = user.name;
+    STATE.preferences.userEmail = user.email;
+    STATE.preferences.timezone = user.timezone;
+  }
+  
+  const badge = document.getElementById('userProfileBadge');
+  const avatar = document.getElementById('userAvatar');
+  const nameDisplay = document.getElementById('userNameDisplay');
+  
+  if (badge) badge.style.display = 'flex';
+  if (avatar) avatar.textContent = user.name ? user.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'U';
+  if (nameDisplay) nameDisplay.textContent = user.name || 'User';
+
+  // Google Calendar integration status updates
+  const connected = user.googleCalendar?.connected || false;
+  updateGcalUI(connected);
+  updateDashboardSyncStatus(connected);
+}
+
+function handleLogout() {
+  localStorage.removeItem('meetai_token');
+  
+  const badge = document.getElementById('userProfileBadge');
+  if (badge) badge.style.display = 'none';
+  
+  const emailInput = document.getElementById('authEmail');
+  if (emailInput) emailInput.value = '';
+  const pwdInput = document.getElementById('authPassword');
+  if (pwdInput) pwdInput.value = '';
+  const nameInput = document.getElementById('authName');
+  if (nameInput) nameInput.value = '';
+  
+  const alertEl = document.getElementById('authAlert');
+  if (alertEl) {
+    alertEl.style.display = 'none';
+    alertEl.className = 'auth-alert';
+  }
+  
+  updateGcalUI(false);
+  updateDashboardSyncStatus(false);
+  showAuthOverlay();
+}
+
+async function checkAuthAndInit() {
+  const token = localStorage.getItem('meetai_token');
+  if (!token) {
+    showAuthOverlay();
+    return;
+  }
+  
+  try {
+    const res = await fetch(`${API_BASE}/auth/me`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        updateUserUI(data.user);
+        hideAuthOverlay();
+        initApp();
+        
+        // Check for Google redirect success param
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('connected') === 'true') {
+          setTimeout(() => {
+            alert("Google Calendar successfully connected!");
+            // Clean URL query parameters
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }, 500);
+        }
+      } else {
+        handleLogout();
+      }
+    } else {
+      handleLogout();
+    }
+  } catch (err) {
+    console.error("Auth check failed:", err);
+    handleLogout();
+  }
+}
+
+// Google Calendar OAuth functions
+function connectGoogle() {
+  const token = localStorage.getItem('meetai_token');
+  window.location.href = `http://localhost:5000/api/calendar/connect?token=${token}`;
+}
+
+async function disconnectGoogle() {
+  if (!confirm("Are you sure you want to disconnect Google Calendar?")) return;
+  try {
+    const res = await fetch(`${API_BASE}/calendar/disconnect`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      updateGcalUI(false);
+      updateDashboardSyncStatus(false);
+      alert("Successfully disconnected Google Calendar.");
+      loadAllData();
+    } else {
+      alert(data.error || "Failed to disconnect Google Calendar");
+    }
+  } catch (err) {
+    console.error("Disconnect GCal failed:", err);
+    alert("Error disconnecting Google Calendar.");
+  }
+}
+
+async function syncGoogle() {
+  const wrapper = document.getElementById('gcal-actions-wrapper');
+  if (wrapper) {
+    wrapper.style.opacity = '0.5';
+    wrapper.style.pointerEvents = 'none';
+  }
+  try {
+    const res = await fetch(`${API_BASE}/calendar/sync/google`);
+    const data = await res.json();
+    if (res.ok && data.synced) {
+      alert(`Successfully synced ${data.eventsImported} events from Google Calendar!`);
+      loadAllData();
+    } else {
+      alert(data.error || 'Failed to sync Google Calendar');
+    }
+  } catch (err) {
+    console.error("Sync GCal failed:", err);
+    alert("Error syncing Google Calendar. Make sure your connection is active.");
+  } finally {
+    if (wrapper) {
+      wrapper.style.opacity = '';
+      wrapper.style.pointerEvents = '';
+    }
+  }
+}
+
+function updateGcalUI(connected) {
+  const wrapper = document.getElementById('gcal-actions-wrapper');
+  const statusGcal = document.getElementById('status-gcal');
+  if (!statusGcal) return;
+  
+  if (connected) {
+    statusGcal.textContent = '✓ Connected';
+    statusGcal.className = 'integration-status text-success';
+    if (wrapper) {
+      wrapper.innerHTML = `
+        <div style="display: flex; gap: 8px; width: 100%;">
+          <button class="btn btn-primary" id="btn-sync-google" style="flex: 1;">Sync now</button>
+          <button class="btn btn-secondary" id="btn-disconnect-google" style="flex: 1;">Disconnect</button>
+        </div>
+      `;
+
+      const syncBtn = document.getElementById('btn-sync-google');
+      if (syncBtn) {
+        syncBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          syncGoogle();
+        });
+      }
+
+      const disconnectBtn = document.getElementById('btn-disconnect-google');
+      if (disconnectBtn) {
+        disconnectBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          disconnectGoogle();
+        });
+      }
+    }
+  } else {
+    statusGcal.textContent = 'Disconnected';
+    statusGcal.className = 'integration-status text-danger';
+    if (wrapper) {
+      wrapper.innerHTML = `
+        <button class="btn btn-primary integration-connect-btn" id="btn-connect-google">Connect</button>
+      `;
+
+      const connectBtn = document.getElementById('btn-connect-google');
+      if (connectBtn) {
+        connectBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          connectGoogle();
+        });
+      }
+    }
+  }
+}
+
+function updateDashboardSyncStatus(connected) {
+  const statusText = document.getElementById('syncStatusText');
+  const statusDesc = document.getElementById('syncStatusDesc');
+  if (!statusText || !statusDesc) return;
+  
+  if (connected) {
+    statusText.textContent = 'Connected';
+    statusText.className = 'stat-value text-success';
+    statusDesc.textContent = 'Google Calendar active';
+  } else {
+    statusText.textContent = 'Disconnected';
+    statusText.className = 'stat-value text-danger';
+    statusDesc.textContent = 'Google/Outlook sync pending';
+  }
+}
+
+// Expose functions globally for HTML triggers
+window.setAuthMode = setAuthMode;
+window.handleAuthSubmit = handleAuthSubmit;
+window.handleLogout = handleLogout;
+window.connectGoogle = connectGoogle;
+window.disconnectGoogle = disconnectGoogle;
+window.syncGoogle = syncGoogle;
 
 document.addEventListener("DOMContentLoaded", () => {
   // Load saved theme
@@ -21,8 +403,9 @@ document.addEventListener("DOMContentLoaded", () => {
     themeSelect.value = savedTheme;
   }
 
-  initApp();
+  checkAuthAndInit();
 });
+
 
 function initApp() {
   startClocks();
@@ -56,6 +439,15 @@ function initApp() {
     sidebarAiBtn.addEventListener('click', (e) => {
       e.preventDefault();
       switchTab('ai-assistant');
+    });
+  }
+
+  const connectGcalBtn = document.getElementById('btn-connect-google');
+  if (connectGcalBtn) {
+    connectGcalBtn.onclick = null;
+    connectGcalBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      connectGoogle();
     });
   }
 
@@ -557,7 +949,7 @@ function submitMessage(isDrawer = false) {
     body: JSON.stringify({
       userId: STATE.preferences.userId,
       message: text,
-      conversationHistory: conversationHistory
+      conversationHistory: conversationHistory.slice(0, -1)
     })
   })
   .then(res => res.json())

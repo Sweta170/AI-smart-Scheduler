@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const { google } = require('googleapis');
+const { oauth2Client } = require('../config/googleOAuth');
+const refreshIfExpired = require('../utils/refreshGoogleToken');
 
 const User = require('../models/User');
 const Meeting = require('../models/Meeting');
@@ -49,7 +52,7 @@ router.get('/users/preferences/:userId', async (req, res) => {
   try {
     let user;
     if (req.params.userId === "user-98836" || req.params.userId === "current") {
-      user = await User.findOne({ email: "you@company.com" });
+      user = req.user || await User.findOne({ email: "you@company.com" });
     } else if (mongoose.Types.ObjectId.isValid(req.params.userId)) {
       user = await User.findById(req.params.userId);
     } else {
@@ -78,7 +81,7 @@ router.get('/users/preferences/:userId', async (req, res) => {
 router.put('/users/preferences/:userId', async (req, res) => {
   try {
     const { startHour, endHour, buffer, platform } = req.body;
-    let user = await User.findOne({ email: "you@company.com" });
+    let user = req.user || await User.findOne({ email: "you@company.com" });
     if (!user) return res.status(404).json({ error: "User not found" });
 
     if (startHour) user.workingHours.start = startHour;
@@ -113,6 +116,41 @@ router.get('/availability/check', async (req, res) => {
 
     if (!user) return res.status(404).json({ error: "User not found" });
 
+    const conflicts = [];
+
+    // Query Google Calendar free-busy list if connected
+    if (user.googleCalendar && user.googleCalendar.connected) {
+      try {
+        const accessToken = await refreshIfExpired(user._id);
+        oauth2Client.setCredentials({ access_token: accessToken });
+        const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+        
+        const dateOnly = new Date(date).toISOString().split('T')[0];
+        const startIso = new Date(`${dateOnly}T${time}:00`).toISOString();
+        const endIso = new Date(new Date(startIso).getTime() + parseInt(duration) * 60 * 1000).toISOString();
+
+        const fbResponse = await calendar.freebusy.query({
+          resource: {
+            timeMin: startIso,
+            timeMax: endIso,
+            items: [{ id: 'primary' }]
+          }
+        });
+
+        const busyList = fbResponse.data.calendars.primary.busy || [];
+        if (busyList.length > 0) {
+          conflicts.push({
+            type: "OVERLAP",
+            title: "Google Calendar Event",
+            overlapMinutes: parseInt(duration)
+          });
+        }
+        console.log('[API CHECK GCAL] Free-busy checked. Busy periods count:', busyList.length);
+      } catch (gcalErr) {
+        console.error('[API CHECK GCAL ERROR] Failed to check Google Calendar availability:', gcalErr.message);
+      }
+    }
+
     // Fetch meetings for user on that day
     const queryDate = new Date(date);
     const startOfDay = new Date(queryDate.setHours(0, 0, 0, 0));
@@ -124,7 +162,6 @@ router.get('/availability/check', async (req, res) => {
       status: { $ne: "cancelled" }
     });
 
-    const conflicts = [];
     const checkStart = parseTimeToMins(time);
     const checkEnd = checkStart + parseInt(duration);
     const buffer = user.preferences.bufferTime || 10;
@@ -244,6 +281,54 @@ router.post('/meetings/create', async (req, res) => {
 
     await newMeeting.save();
 
+    // TOOL 03 - Google Calendar Sync Hook
+    if (req.user && req.user.googleCalendar && req.user.googleCalendar.connected) {
+      try {
+        const accessToken = await refreshIfExpired(req.user._id);
+        oauth2Client.setCredentials({ access_token: accessToken });
+        const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+        const dateOnly = new Date(date).toISOString().split('T')[0];
+        const startStr = `${dateOnly}T${time}:00`;
+        const endStr = new Date(new Date(startStr).getTime() + parseInt(duration) * 60 * 1000).toISOString();
+
+        const gcalEvent = {
+          summary: title,
+          description: notes || '',
+          start: {
+            dateTime: new Date(startStr).toISOString(),
+            timeZone: req.user.timezone || 'Asia/Kolkata'
+          },
+          end: {
+            dateTime: endStr,
+            timeZone: req.user.timezone || 'Asia/Kolkata'
+          },
+          attendees: attendees.map(email => ({ email })),
+          conferenceData: {
+            createRequest: {
+              requestId: newMeeting._id.toString(),
+              conferenceSolutionKey: { type: 'hangoutsMeet' }
+            }
+          }
+        };
+
+        const response = await calendar.events.insert({
+          calendarId: 'primary',
+          resource: gcalEvent,
+          conferenceDataVersion: 1
+        });
+
+        newMeeting.googleEventId = response.data.id;
+        if (response.data.hangoutLink) {
+          newMeeting.videoLink = response.data.hangoutLink;
+        }
+        await newMeeting.save();
+        console.log('[API CREATE] Real Google Calendar event created:', response.data.id);
+      } catch (gcalErr) {
+        console.error('[API CREATE GCAL ERROR] Failed to create Google Calendar event:', gcalErr.message);
+      }
+    }
+
     // Create attendee RSVP records
     const attendeeRecords = resolvedAttendees.map(uId => ({
       userId: uId,
@@ -298,7 +383,7 @@ router.post('/meetings/create', async (req, res) => {
 // ---------------------------------------------------------
 router.get('/meetings/today', async (req, res) => {
   try {
-    const hostUser = await User.findOne({ email: "you@company.com" });
+    const hostUser = req.user || await User.findOne({ email: "you@company.com" });
     if (!hostUser) return res.json({ meetings: [] });
 
     const todayDate = new Date("2026-05-26"); // Static system date for tour consistency
@@ -335,7 +420,7 @@ router.get('/meetings/today', async (req, res) => {
 // ---------------------------------------------------------
 router.get('/meetings/week', async (req, res) => {
   try {
-    const hostUser = await User.findOne({ email: "you@company.com" });
+    const hostUser = req.user || await User.findOne({ email: "you@company.com" });
     if (!hostUser) return res.json({ meetings: [] });
 
     // Current week: Mon May 25 to Sun May 31 2026
@@ -464,7 +549,7 @@ router.delete('/meetings/cancel/:id', async (req, res) => {
 router.post('/conflicts/detect', async (req, res) => {
   try {
     const { userId, dateRange } = req.body;
-    let user = await User.findOne({ email: "you@company.com" });
+    let user = req.user || await User.findOne({ email: "you@company.com" });
     if (!user) return res.json({ conflicts: [] });
 
     // Scans meetings today (May 26) for overlaps
