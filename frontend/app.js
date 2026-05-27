@@ -2,7 +2,9 @@
  * MeetAI UI Controller and Glue Code
  */
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:5000/api'
+  : 'https://ai-smart-scheduler-backend.onrender.com/api'; // Replace this URL with your actual deployed Render URL
 let conversationHistory = [];
 let chatDrawerOpen = false;
 
