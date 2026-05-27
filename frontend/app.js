@@ -4,7 +4,9 @@
 
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:5000/api'
-  : 'https://meetai-backend.onrender.com/api';
+  : 'https://meetai-backend-mlkx.onrender.com/api';
+
+
 let conversationHistory = [];
 let chatDrawerOpen = false;
 
