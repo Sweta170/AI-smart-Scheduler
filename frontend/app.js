@@ -4,7 +4,7 @@
 
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:5000/api'
-  : 'https://ai-smart-scheduler-backend.onrender.com/api'; // Replace this URL with your actual deployed Render URL
+  : 'https://meetai-backend.onrender.com/api';
 let conversationHistory = [];
 let chatDrawerOpen = false;
 
