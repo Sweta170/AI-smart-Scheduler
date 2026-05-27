@@ -1,0 +1,31 @@
+{
+  "name": "meetai-smart-scheduler",
+  "version": "1.0.0",
+  "description": "MeetAI - Intelligent Meeting Scheduling Assistant (Final Year Project)",
+  "main": "frontend/index.html",
+  "scripts": {
+    "server": "nodemon server/server.js",
+    "client": "npx http-server ./frontend -p 3000",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mongoose": "^8.3.1",
+    "nodemailer": "^6.9.13"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "http-server": "^14.1.1",
+    "nodemon": "^3.1.0"
+  },
+  "keywords": [
+    "scheduler",
+    "meeting",
+    "ai",
+    "assistant"
+  ],
+  "author": "MeetAI Team",
+  "license": "ISC"
+}
