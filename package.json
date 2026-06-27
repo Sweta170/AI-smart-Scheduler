@@ -5,7 +5,7 @@
   "main": "frontend/index.html",
   "scripts": {
     "server": "nodemon server/server.js",
-    "client": "npx http-server ./frontend -p 3000",
+    "client": "npx http-server ./frontend -p 3000 -c-1",
     "dev": "concurrently \"npm run server\" \"npm run client\""
   },
   "dependencies": {

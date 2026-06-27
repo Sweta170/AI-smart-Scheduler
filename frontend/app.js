@@ -1476,4 +1476,117 @@ function nextMonth() {
   alert("Calendar navigation is simulated for May 2026 (Tour/Onboarding consistency).");
 }
 
+// New Meeting Modal Logic
+function openNewMeetingModal() {
+  const modal = document.getElementById('newMeetingModal');
+  if (modal) {
+    modal.classList.add('active');
+    // Pre-fill with the real current date
+    const today = new Date();
+    document.getElementById('newMeetingDate').value = today.toISOString().split('T')[0];
+  }
+}
+
+function closeNewMeetingModal() {
+  const modal = document.getElementById('newMeetingModal');
+  if (modal) {
+    modal.classList.remove('active');
+    // Clear inputs
+    document.getElementById('newMeetingTitle').value = '';
+    document.getElementById('newMeetingDate').value = '';
+    document.getElementById('newMeetingStartTime').value = '';
+    document.getElementById('newMeetingEndTime').value = '';
+    document.getElementById('newMeetingAttendees').value = '';
+    document.getElementById('newMeetingPlatform').value = 'Google Meet';
+  }
+}
+
+async function submitNewMeeting() {
+  const title = document.getElementById('newMeetingTitle').value;
+  const date = document.getElementById('newMeetingDate').value;
+  const startTime = document.getElementById('newMeetingStartTime').value;
+  const endTime = document.getElementById('newMeetingEndTime').value;
+  const attendees = document.getElementById('newMeetingAttendees').value;
+  
+  if (!title || !date || !startTime || !endTime) {
+    alert("Please fill in all required fields.");
+    return;
+  }
+  
+  const submitBtn = document.querySelector('#newMeetingModal .btn-primary');
+  const originalText = submitBtn.textContent;
+  submitBtn.textContent = 'Scheduling...';
+  submitBtn.disabled = true;
+
+  try {
+    const startH = parseInt(startTime.split(':')[0]);
+    const startM = parseInt(startTime.split(':')[1]);
+    const endH = parseInt(endTime.split(':')[0]);
+    const endM = parseInt(endTime.split(':')[1]);
+    
+    const durationMins = (endH * 60 + endM) - (startH * 60 + startM);
+    
+    const payload = {
+      title: title,
+      date: date,
+      time: startTime,
+      duration: durationMins,
+      type: "1on1",
+      videoLink: "https://meet.google.com/new",
+      notes: "Manually scheduled",
+      attendees: attendees.split(',').map(a => a.trim()).filter(a => a)
+    };
+    
+    const response = await fetch(`${API_BASE}/meetings/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      let errData = {};
+      try { errData = await response.json(); } catch(e) {}
+      throw new Error(errData.error || `API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (typeof STATE !== 'undefined' && STATE.events && data.meeting) {
+      STATE.events.push(data.meeting);
+    }
+    
+    closeNewMeetingModal();
+    
+    // Show success banner or rely on UI reload
+    const alertBanner = document.createElement("div");
+    alertBanner.className = "auth-alert success";
+    alertBanner.textContent = "Meeting successfully scheduled!";
+    alertBanner.style.display = "block";
+    alertBanner.style.position = "fixed";
+    alertBanner.style.bottom = "20px";
+    alertBanner.style.right = "20px";
+    alertBanner.style.zIndex = "9999";
+    document.body.appendChild(alertBanner);
+    setTimeout(() => alertBanner.remove(), 3000);
+    
+    // Re-render views
+    if (typeof loadAllData === 'function') {
+      loadAllData();
+    } else {
+      if (typeof renderCalendar === 'function') renderCalendar();
+      if (typeof fetchAndRenderDashboard === 'function') fetchAndRenderDashboard();
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Failed to schedule meeting.");
+  } finally {
+    submitBtn.textContent = originalText;
+    submitBtn.disabled = false;
+  }
+}
+
+// Expose globally
+window.openNewMeetingModal = openNewMeetingModal;
+window.closeNewMeetingModal = closeNewMeetingModal;
+window.submitNewMeeting = submitNewMeeting;
 

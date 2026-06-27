@@ -5,11 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="MeetAI — AI-powered smart meeting scheduler with conflict detection, timezone management, and intelligent scheduling.">
   <title>MeetAI — Smart Scheduling Workspace</title>
-  <link rel="stylesheet" href="style.css?v=2.0.5">
+  <link rel="stylesheet" href="style.css?v=2.0.6">
   <!-- Three.js for 3D effects -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
+  <!-- Global 3D Background Container -->
+  <div id="global-3d-container"></div>
+
   <div class="app-container">
     <!-- Header -->
     <header class="app-header">
@@ -57,6 +60,10 @@
       <!-- Left Sidebar Navigation -->
       <aside class="app-sidebar" id="appSidebar">
         <div class="sidebar-menu">
+          <button class="sidebar-btn new-meeting-btn" onclick="openNewMeetingModal()">
+            <span class="sidebar-icon"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></span>
+            <span class="sidebar-label">New Meeting</span>
+          </button>
           <button class="sidebar-btn" id="sidebar-dashboard" onclick="switchTab('dashboard')">
             <span class="sidebar-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg></span>
             <span class="sidebar-label">Dashboard</span>
@@ -804,6 +811,50 @@
     </div>
   </div>
 
+  <!-- New Meeting Modal -->
+  <div class="modal-overlay" id="newMeetingModal">
+    <div class="modal-content">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0; font-size: 18px;">Schedule New Meeting</h3>
+        <button class="modal-close" onclick="closeNewMeetingModal()" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px;">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="auth-label" style="display: block; margin-bottom: 6px;">Meeting Title</label>
+          <input type="text" id="newMeetingTitle" class="auth-input" style="width: 100%; box-sizing: border-box;" placeholder="e.g. Project Sync" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="auth-label" style="display: block; margin-bottom: 6px;">Date</label>
+          <input type="date" id="newMeetingDate" class="auth-input" style="width: 100%; box-sizing: border-box;" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="auth-label" style="display: block; margin-bottom: 6px;">Time Range</label>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="time" id="newMeetingStartTime" class="auth-input" style="flex: 1; min-width: 0;" required>
+            <span style="color: var(--text-muted);">to</span>
+            <input type="time" id="newMeetingEndTime" class="auth-input" style="flex: 1; min-width: 0;" required>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="auth-label" style="display: block; margin-bottom: 6px;">Attendees (Emails)</label>
+          <input type="text" id="newMeetingAttendees" class="auth-input" style="width: 100%; box-sizing: border-box;" placeholder="e.g. name@example.com">
+        </div>
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="auth-label" style="display: block; margin-bottom: 6px;">Platform</label>
+          <select id="newMeetingPlatform" class="auth-select" style="width: 100%; box-sizing: border-box;">
+            <option value="Google Meet">Google Meet</option>
+            <option value="Zoom">Zoom</option>
+            <option value="Teams">Microsoft Teams</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeNewMeetingModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitNewMeeting()">Schedule</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Authentication Overlay Screen -->
   <div class="auth-overlay-screen" id="authOverlayScreen" data-auth-mode="login" style="background: transparent;">
     <div class="auth-card glass-panel" style="position: relative; z-index: 10; margin: auto;">
@@ -870,11 +921,11 @@
     </div>
   </div>
 
-  <!-- Scripts -->
   <script src="scheduler-engine.js?v=2.0.5"></script>
-  <script src="app.js?v=2.0.5"></script>
+  <script src="app.js?v=2.1.3"></script>
   <script src="onboarding.js"></script>
-  <!-- 3D Scene -->
-  <script src="3d-scene.js"></script>
+  <!-- 3D Scenes -->
+  <script src="global-3d-scene.js?v=1.1.0"></script>
+  <script src="3d-scene.js?v=1.0.1"></script>
 </body>
 </html>

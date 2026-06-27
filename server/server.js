@@ -142,6 +142,9 @@ const { protect } = require('./middleware/auth');
 const apiRouter = require('./routes/api');
 app.use('/api', protect, apiRouter);
 
+const aiAgentRouter = require('./routes/aiAgent');
+app.use('/api/ai', protect, aiAgentRouter);
+
 // Start automated reminder background cron job
 require('./jobs/reminderJob');
 
